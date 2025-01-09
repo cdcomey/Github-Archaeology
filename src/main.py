@@ -1,5 +1,6 @@
 import subprocess
 import datetime
+from sortedcontainers import SortedDict
 
 def find_commit_hashes():
     result = subprocess.run(['git', 'log', '--oneline'], capture_output=True, cwd='../data/godot', text=True)
@@ -58,22 +59,42 @@ def analyze_commit(commit_hash):
     del commit_timestamp['']
     return date, commit_timestamp
 
-def add_timestamp_to_histories(language_histories, commit_timestamp):
-    pass
-
-def main():
-    language_histories = []
-
-    hashes = find_commit_hashes()
-    date, commit_info = analyze_commit(hashes[1000])
-    print(date)
-    print(commit_info)
+def add_timestamp_to_histories(language_histories, commit_timestamp, commit_info):
+    for lang in commit_info.keys():
+        if lang in language_histories.keys():
+            language_histories[lang][commit_timestamp] = commit_info[lang]
+        else:
+            language_histories[lang] = SortedDict({commit_timestamp: commit_info[lang]})
     
-if __name__ == '__main__':
-    main()
+    return language_histories
 
-# list of dicts
+def print_language_histories(language_histories):
+    for lang in language_histories.keys():
+        print(lang)
+        running_total = 0
+        for timestamp in language_histories[lang].keys():
+            print('\t', timestamp)
+
+            lines_added_at_timestamp = language_histories[lang][timestamp]
+            print('\t', lines_added_at_timestamp, 'lines added')
+
+            running_total += lines_added_at_timestamp
+            print('\t', running_total, 'lines so far')
+            
+
+# dictionary
 # 	key = lang name
 # 	val = sorted dict
 # 		keys = times
 # 		vals = num lines
+
+def main():
+    language_histories = {}
+
+    hashes = find_commit_hashes()
+    date, commit_info = analyze_commit(hashes[1000])
+    language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
+    print_language_histories(language_histories)
+
+if __name__ == '__main__':
+    main()
