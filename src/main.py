@@ -5,6 +5,8 @@ from sortedcontainers import SortedDict
 def find_commit_hashes():
     result = subprocess.run(['git', 'log', '--oneline'], capture_output=True, cwd='../data/godot', text=True)
     result = result.stdout.split('\n')
+    # for r in result[-10:]:
+    #     print(r)
     hashes = [r[:r.find(' ')] for r in result if ' ' in r]
     return hashes
 
@@ -14,8 +16,11 @@ def find_file_extension(line):
 
     dot_index_a = first_file.rfind('.')
     dot_index_b = last_file.rfind('.')
-    assert first_file[dot_index_a:] == last_file[dot_index_b:]
-
+    
+    try:
+        assert first_file[dot_index_a:] == last_file[dot_index_b:]
+    except:
+        print('Error in find_file_extension() for line', line)
     return first_file[dot_index_a:]
 
 def parse_timestamp(date_str):
@@ -31,8 +36,19 @@ def parse_timestamp(date_str):
     
 def analyze_commit(commit_hash):
     commit_info = {}
-    result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot', text=True)
-    result = result.stdout
+    # print('showing hash', commit_hash)
+    # try:
+    #     result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
+    #     result = result.stdout.decode('utf-8', errors='ignore')
+    # except UnicodeDecodeError:
+    #     print('error with', commit_hash)
+    #     result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
+    #     output_bytes = result.stdout
+    #     decoded_output = output_bytes.decode('utf-8', errors='replace')
+    #     print(decoded_output)
+    result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
+    result = result.stdout.decode('utf-8', errors='ignore')
+
     # print(result)
     date = ''
     file_extension = ''
@@ -56,7 +72,8 @@ def analyze_commit(commit_hash):
         elif line.startswith('-'):
             lines_added -= 1
     
-    del commit_info['']
+    if '' in commit_info.keys():
+        del commit_info['']
     return date, commit_info
 
 def add_timestamp_to_histories(language_histories, commit_timestamp, commit_info):
@@ -92,8 +109,10 @@ def main():
     language_histories = {}
 
     hashes = find_commit_hashes()
-    date, commit_info = analyze_commit(hashes[1000])
-    language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
+    hashes.reverse()
+    for hash in hashes:
+        date, commit_info = analyze_commit(hash)
+        language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
     print_language_histories(language_histories)
 
 if __name__ == '__main__':
