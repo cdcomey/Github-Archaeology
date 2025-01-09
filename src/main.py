@@ -30,7 +30,7 @@ def parse_timestamp(date_str):
     return dt_with_offset
     
 def analyze_commit(commit_hash):
-    commit_timestamp = {}
+    commit_info = {}
     result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot', text=True)
     result = result.stdout
     # print(result)
@@ -43,10 +43,10 @@ def analyze_commit(commit_hash):
             date = parse_timestamp(date_str)
 
         elif line.startswith('diff --git a/'):
-            if file_extension in commit_timestamp:
-                commit_timestamp[file_extension] += lines_added
+            if file_extension in commit_info:
+                commit_info[file_extension] += lines_added
             else:
-                commit_timestamp[file_extension] = lines_added
+                commit_info[file_extension] = lines_added
             
             file_extension = find_file_extension(line)
             lines_added = 0
@@ -56,8 +56,8 @@ def analyze_commit(commit_hash):
         elif line.startswith('-'):
             lines_added -= 1
     
-    del commit_timestamp['']
-    return date, commit_timestamp
+    del commit_info['']
+    return date, commit_info
 
 def add_timestamp_to_histories(language_histories, commit_timestamp, commit_info):
     for lang in commit_info.keys():
