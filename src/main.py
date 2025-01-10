@@ -5,23 +5,18 @@ from sortedcontainers import SortedDict
 def find_commit_hashes():
     result = subprocess.run(['git', 'log', '--oneline'], capture_output=True, cwd='../data/godot', text=True)
     result = result.stdout.split('\n')
-    # for r in result[-10:]:
-    #     print(r)
     hashes = [r[:r.find(' ')] for r in result if ' ' in r]
     return hashes
 
-def find_file_extension(line):
-    line = line[line.find('diff --git a/') + len('diff --git a/'):]
-    first_file, last_file = line.split(' b/')
+def parse_file_names(line):
+    b_loc = line.find(' b/')
+    file1 = line[line.find('a/')+2:b_loc]
+    file_extension1 = file1[file1.rfind('.'):]
 
-    dot_index_a = first_file.rfind('.')
-    dot_index_b = last_file.rfind('.')
-    
-    try:
-        assert first_file[dot_index_a:] == last_file[dot_index_b:]
-    except:
-        print('Error in find_file_extension() for line', line)
-    return first_file[dot_index_a:]
+    file2 = line[b_loc+3:]
+    file_extension2 = file2[file2.rfind('.'):]
+
+    return file1, file_extension1, file2, file_extension2
 
 def parse_timestamp(date_str):
     date = datetime.datetime.strptime(date_str[:-6], '%a %b %d %H:%M:%S %Y')
@@ -33,23 +28,25 @@ def parse_timestamp(date_str):
     dt_with_offset = date.replace(tzinfo=datetime.timezone(offset))
 
     return dt_with_offset
+
+def find_file_length(hash, file):
+    result = subprocess.run(['git', 'show', f'{hash}^1:{file2}'], capture_output=True, text=True)
+    if result.returncode == 0:
+        return len(result.stdout.splitlines())
+    else:
+        raise ValueError(f'Failed to retrieve file content for {file_path} at {hash}')
+
+def add_to_dict(dict, key, val):
+    if key in dict:
+        dict[key] += val
+    else:
+        dict[key] = val
     
 def analyze_commit(commit_hash):
     commit_info = {}
-    # print('showing hash', commit_hash)
-    # try:
-    #     result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
-    #     result = result.stdout.decode('utf-8', errors='ignore')
-    # except UnicodeDecodeError:
-    #     print('error with', commit_hash)
-    #     result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
-    #     output_bytes = result.stdout
-    #     decoded_output = output_bytes.decode('utf-8', errors='replace')
-    #     print(decoded_output)
-    result = subprocess.run(['git', 'show', commit_hash], capture_output=True, cwd='../data/godot')
+    result = subprocess.run(['git', 'show', '--no-merges', commit_hash], capture_output=True, cwd='../data/godot')
     result = result.stdout.decode('utf-8', errors='ignore')
 
-    # print(result)
     date = ''
     file_extension = ''
     lines_added = 0
@@ -57,14 +54,16 @@ def analyze_commit(commit_hash):
         if line.startswith('Date:   '):
             date_str = line[len('Date:   '):]
             date = parse_timestamp(date_str)
-
+        
         elif line.startswith('diff --git a/'):
-            if file_extension in commit_info:
-                commit_info[file_extension] += lines_added
-            else:
-                commit_info[file_extension] = lines_added
+            file1, file_extension1, file2, file_extension2 = parse_file_names(line)
+            if file_extension1 != file_extension2:
+                old_file_length = find_file_length(commit_hash, file2)
+                commit_info[file_extension1] -= old_file_length
+                add_to_dict(commit_info, file_extension2, old_file_length)
             
-            file_extension = find_file_extension(line)
+            file_extension = file_extension2
+            add_to_dict(commit_info, file_extension, lines_added)
             lines_added = 0
 
         elif line.startswith('+'):
@@ -75,6 +74,7 @@ def analyze_commit(commit_hash):
     if '' in commit_info.keys():
         del commit_info['']
     return date, commit_info
+        
 
 def add_timestamp_to_histories(language_histories, commit_timestamp, commit_info):
     for lang in commit_info.keys():
@@ -99,18 +99,12 @@ def print_language_histories(language_histories):
             print('\t', running_total, 'lines so far')
             
 
-# dictionary
-# 	key = lang name
-# 	val = sorted dict
-# 		keys = times
-# 		vals = num lines
-
 def main():
     language_histories = {}
 
     hashes = find_commit_hashes()
     hashes.reverse()
-    for hash in hashes:
+    for hash in hashes[:20]:
         date, commit_info = analyze_commit(hash)
         language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
     print_language_histories(language_histories)
