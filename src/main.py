@@ -30,42 +30,49 @@ def parse_timestamp(date_str):
     return dt_with_offset
 
 def find_file_length(hash, file):
-    result = subprocess.run(['git', 'show', f'{hash}^1:{file2}'], capture_output=True, text=True)
+    result = subprocess.run(['git', 'show', f'{hash}:{file}'], capture_output=True, cwd='../data/godot', text=True)
     if result.returncode == 0:
         return len(result.stdout.splitlines())
     else:
-        raise ValueError(f'Failed to retrieve file content for {file_path} at {hash}')
+        raise ValueError(f'Failed to retrieve file content for {file} at {hash}')
 
 def add_to_dict(dict, key, val):
     if key in dict:
         dict[key] += val
     else:
         dict[key] = val
-    
+
+# parse the diff text of a commit and return the line count changes for each file type
 def analyze_commit(commit_hash):
-    commit_info = {}
+    print('showing', commit_hash)
+
+    # get the commit text
     result = subprocess.run(['git', 'show', '--no-merges', commit_hash], capture_output=True, cwd='../data/godot')
     result = result.stdout.decode('utf-8', errors='ignore')
 
     date = ''
     file_extension = ''
     lines_added = 0
+    commit_info = {}
     for line in result.split('\n'):
+        # parse date string and store as datetime
         if line.startswith('Date:   '):
             date_str = line[len('Date:   '):]
             date = parse_timestamp(date_str)
         
+        # determine file type
         elif line.startswith('diff --git a/'):
             file1, file_extension1, file2, file_extension2 = parse_file_names(line)
             if file_extension1 != file_extension2:
                 old_file_length = find_file_length(commit_hash, file2)
-                commit_info[file_extension1] -= old_file_length
+                add_to_dict(commit_info, file_extension1, -1*old_file_length)
                 add_to_dict(commit_info, file_extension2, old_file_length)
             
             file_extension = file_extension2
             add_to_dict(commit_info, file_extension, lines_added)
             lines_added = 0
 
+        # count when lines are added or deleted
         elif line.startswith('+'):
             lines_added += 1
         elif line.startswith('-'):
@@ -75,7 +82,6 @@ def analyze_commit(commit_hash):
         del commit_info['']
     return date, commit_info
         
-
 def add_timestamp_to_histories(language_histories, commit_timestamp, commit_info):
     for lang in commit_info.keys():
         if lang in language_histories.keys():
@@ -102,9 +108,10 @@ def print_language_histories(language_histories):
 def main():
     language_histories = {}
 
+    # list is reversed to place in chronological order
     hashes = find_commit_hashes()
     hashes.reverse()
-    for hash in hashes[:20]:
+    for hash in hashes:
         date, commit_info = analyze_commit(hash)
         language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
     print_language_histories(language_histories)
