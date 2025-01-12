@@ -1,6 +1,7 @@
 import subprocess
 import datetime
 from sortedcontainers import SortedDict
+import matplotlib.pyplot as plt
 
 def find_commit_hashes():
     result = subprocess.run(['git', 'log', '--oneline'], capture_output=True, cwd='../data/godot', text=True)
@@ -103,6 +104,25 @@ def print_language_histories(language_histories):
 
             running_total += lines_added_at_timestamp
             print('\t', running_total, 'lines so far')
+
+def data_grapher(language_histories):
+    threshold = 100
+    for lang in language_histories.keys():
+        dates = language_histories[lang].keys()
+        line_counts = language_histories[lang].values()
+        counter = 0
+        total_line_counts = []
+        for d in dates:
+            counter += language_histories[lang][d]
+            total_line_counts.append(counter)
+
+        if total_line_counts[-1] >= threshold:
+            plt.plot(dates, total_line_counts, label=lang)
+            plt.text(dates[-1], total_line_counts[-1], '{}: {}'.format(lang, total_line_counts[-1]))
+            print('graphing', lang)
+
+    # plt.legend()
+    plt.show()
             
 
 def main():
@@ -114,7 +134,8 @@ def main():
     for hash in hashes:
         date, commit_info = analyze_commit(hash)
         language_histories = add_timestamp_to_histories(language_histories, date, commit_info)
-    print_language_histories(language_histories)
+    # print_language_histories(language_histories)
+    data_grapher(language_histories)
 
 if __name__ == '__main__':
     main()
